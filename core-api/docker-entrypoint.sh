@@ -17,8 +17,12 @@ case "${DD_TRACE_ENABLED:-true}" in
   *) dd_trace_on=1 ;;
 esac
 
-if [ -n "${DD_API_KEY:-}" ] && [ "$dd_trace_on" = "1" ] && [ -x /app/dd/datadog-init ]; then
-  exec /app/dd/datadog-init ddtrace-run "$@"
+if [ -n "${DD_API_KEY:-}" ] && [ "$dd_trace_on" = "1" ]; then
+  if [ -x /app/dd/datadog-init ]; then
+    exec /app/dd/datadog-init ddtrace-run "$@"
+  else
+    echo "[entrypoint] WARNING: DD_API_KEY is set but /app/dd/datadog-init is not present; starting without Datadog APM (was this image built with --build-arg DD_APM_ENABLED=true?)" >&2
+  fi
 fi
 
 exec "$@"
