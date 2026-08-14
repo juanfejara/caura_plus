@@ -1,6 +1,4 @@
-<p align="center">
-  <img src="static/images/memCLAW_logo_dark.png" alt="Caura" width="420" />
-</p>
+<h1 align="center">Caura &mdash; Shared governed memory for AI agents</h1>
 
 <h3 align="center">Fleet memory for AI agents &mdash; governed, shared, self-improving.</h3>
 
@@ -43,7 +41,7 @@ Agents write plain text. Caura turns it into searchable, governed, self-improvin
 > [Architecture deep-dive →](https://memclaw.net/blog/etoro-company-brain/)
 
 <p align="center">
-  <img src="static/images/memclaw-concept.png" alt="Caura — Fleet Memory that Compounds" width="700" />
+  <img src="static/images/caura-concept.png" alt="Caura — Fleet Memory that Compounds" width="700" />
 </p>
 
 <p align="center">
