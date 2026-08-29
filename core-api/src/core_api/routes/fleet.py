@@ -6,6 +6,7 @@ import time
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
 
@@ -999,14 +1000,23 @@ async def create_command(
     auth.enforce_read_only()
     tenant_id = body.tenant_id or auth.tenant_id
     auth.enforce_tenant(tenant_id)
-    cmd = await sc.create_command(
-        {
-            "tenant_id": tenant_id,
-            "node_id": str(body.node_id),
-            "command": body.command,
-            "payload": body.payload,
-        }
-    )
+    try:
+        cmd = await sc.create_command(
+            {
+                "tenant_id": tenant_id,
+                "node_id": str(body.node_id),
+                "command": body.command,
+                "payload": body.payload,
+            }
+        )
+    except httpx.HTTPStatusError as exc:
+        # Storage refuses a node that isn't this tenant's (and one that doesn't
+        # exist) with a 404. ``upstream_http_error_handler`` deliberately
+        # re-raises upstream 4xx, which would surface that as a 500, so the
+        # status has to be carried across here.
+        if exc.response.status_code == 404:
+            raise HTTPException(status_code=404, detail="Node not found") from exc
+        raise
     return {"id": str(cmd.get("id", "")), "status": cmd.get("status", "pending")}
 
 

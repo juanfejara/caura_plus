@@ -125,6 +125,27 @@ async def delete_node(
 @router.post("/commands")
 async def create_command(request: Request) -> dict:
     body: dict = await request.json()
+    # The node must belong to the tenant the command is being filed under.
+    # ``fleet_commands.node_id`` has an FK to ``fleet_nodes.id`` but there is no
+    # cross-column tenant constraint, so an insert naming ANOTHER tenant's node
+    # UUID satisfies the FK and lands — and ``fleet_get_pending_commands`` keys
+    # on ``node_id`` alone, so that node collects the row on its next heartbeat.
+    # The caller's tenant gate upstream only ever sees ``tenant_id``, which the
+    # caller is free to set to its own; the node/tenant PAIR is checked nowhere
+    # else, so it has to be checked here.
+    raw_node_id = body.get("node_id")
+    node = None
+    if raw_node_id is not None:
+        try:
+            node = await _svc.fleet_get_node_by_id(node_id=UUID(str(raw_node_id)))
+        except ValueError:
+            node = None
+    if node is None or node.tenant_id != body.get("tenant_id"):
+        # 404 for "no such node" and "not your node" alike. Splitting them would
+        # make this route an existence oracle for node UUIDs — and an unguarded
+        # insert of an unknown UUID raises ForeignKeyViolationError, which is an
+        # unhandled 500 rather than an answer.
+        raise HTTPException(status_code=404, detail="Node not found")
     command = await _svc.fleet_add_command(body)
     return orm_to_dict(command, FLEET_COMMAND_FIELDS)
 
@@ -159,7 +180,7 @@ async def get_pending_commands(
     node_name: str,
 ) -> list[dict]:
     node_id = await _svc.fleet_get_node_id(tenant_id=tenant_id, node_name=node_name)
-    commands = await _svc.fleet_get_pending_commands(node_id=node_id)
+    commands = await _svc.fleet_get_pending_commands(node_id=node_id, tenant_id=tenant_id)
     return [orm_to_dict(c, FLEET_COMMAND_FIELDS) for c in commands]
 
 

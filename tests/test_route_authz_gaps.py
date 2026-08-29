@@ -355,6 +355,91 @@ async def test_fleet_command_cannot_be_queued_into_another_tenant(client, as_aut
     assert resp.json() == []
 
 
+async def test_fleet_command_cannot_target_another_tenants_node(client, as_auth):
+    """H-13, third half: the node has to belong to the tenant the command lands in.
+
+    ``enforce_tenant`` only checks ``body.tenant_id``, so a caller naming its OWN
+    tenant clears it — while still pointing ``body.node_id`` at somebody else's
+    node. Nothing downstream re-checks the pair: the insert satisfies the FK to
+    ``fleet_nodes.id`` on its own, and the pending-command query the heartbeat
+    runs is keyed on ``node_id`` alone. The row is therefore handed to the other
+    tenant's node on its next heartbeat.
+
+    Queueing into a node you do not own is a 404, not a 403 — the same
+    non-disclosing answer ``POST /fleet/commands/{id}/result`` gives for a
+    command UUID belonging to another tenant. A 403 would confirm the node
+    exists, turning the route into an existence oracle for node UUIDs.
+    """
+    victim = f"victim-{_uid()}"
+    attacker = f"attacker-{_uid()}"
+    victim_node_name = f"node-{_uid()}"
+
+    # A real node in the victim's fleet, created by the victim.
+    as_auth(victim)
+    resp = await client.post(
+        "/api/v1/fleet/heartbeat",
+        json={
+            "tenant_id": victim,
+            "node_name": victim_node_name,
+            "fleet_id": f"fleet-{_uid()}",
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    victim_node_id = resp.json()["node_id"]
+
+    # The attacker queues into its own tenant — the tenant gate passes cleanly —
+    # but aims the command at the victim's node.
+    as_auth(attacker)
+    resp = await client.post(
+        "/api/v1/fleet/commands",
+        json={
+            "tenant_id": attacker,
+            "node_id": victim_node_id,
+            "command": "deploy",
+            "payload": {"injected": True},
+        },
+    )
+    assert resp.status_code == 404, resp.text
+
+    # The whole point: the victim's node must not be handed the command when it
+    # next checks in. Asserting on the queue alone would miss a row that is
+    # filed under the attacker's tenant but still delivered on node_id.
+    as_auth(victim)
+    resp = await client.post(
+        "/api/v1/fleet/heartbeat",
+        json={
+            "tenant_id": victim,
+            "node_name": victim_node_name,
+            "fleet_id": f"fleet-{_uid()}",
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["commands"] == []
+
+
+async def test_fleet_command_for_an_unknown_node_is_404_not_500(client, as_auth):
+    """A node UUID that exists nowhere must get the same 404 as a foreign one.
+
+    Unguarded, this reaches the DB and raises ``ForeignKeyViolationError`` from
+    the ``fleet_commands_node_id_fkey`` constraint — an unhandled 500. Beyond
+    being the wrong status, a 500-vs-201 split tells the caller whether a node
+    UUID exists in *any* tenant.
+    """
+    tenant = f"tenant-{_uid()}"
+
+    as_auth(tenant)
+    resp = await client.post(
+        "/api/v1/fleet/commands",
+        json={
+            "tenant_id": tenant,
+            "node_id": str(uuid.uuid4()),
+            "command": "ping",
+            "payload": {},
+        },
+    )
+    assert resp.status_code == 404, resp.text
+
+
 async def test_fleet_command_rejects_a_read_only_credential(client, as_auth):
     """H-13, second half: queueing a command is a write."""
     tenant = f"tenant-{_uid()}"

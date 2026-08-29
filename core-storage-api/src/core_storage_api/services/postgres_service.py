@@ -8925,12 +8925,20 @@ class PostgresService:
         self,
         *,
         node_id: UUID,
+        tenant_id: str,
     ) -> Sequence[FleetCommand]:
+        # Scoped on the node/tenant PAIR, not on ``node_id`` alone. The caller
+        # resolves ``node_id`` from (tenant_id, node_name), so a node_id-only
+        # predicate looks tenant-safe and is not: any row whose ``node_id``
+        # matches is handed over regardless of which tenant it was filed under.
+        # ``create_command`` now refuses to write such a row, but this is the
+        # delivery gate — it also neutralises any row already in the table.
         async with get_session() as session:
             result = await session.execute(
                 select(FleetCommand)
                 .where(
                     FleetCommand.node_id == node_id,
+                    FleetCommand.tenant_id == tenant_id,
                     FleetCommand.status == "pending",
                 )
                 .order_by(FleetCommand.created_at)
