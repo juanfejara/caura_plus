@@ -118,13 +118,14 @@ Ready for semantic recall, multi-tenant, a managed host, or an OpenClaw fleet? P
 
 ---
 
-Three paths — pick the one that matches your setup:
+Four paths — pick the one that matches your setup:
 
 | Path | When | Time to first memory |
 |---|---|---|
 | **Managed platform** | Quickest. We host the DB + scaling. | ~2 min |
 | **Self-hosted (Docker)** | Privacy / on-prem / air-gapped. | ~5 min |
 | **OpenClaw plugin** | You already run an OpenClaw fleet — install Caura as a plugin against any of the above. | ~3 min |
+| **Rail SDK** | You write the agent yourself, in Python or TypeScript, and want it to recall rules and facts before every turn and store what it learned after. Works against any of the above. | ~2 min |
 
 ### Managed Platform
 
@@ -203,6 +204,51 @@ npm install @caura/client
 
 See the [TypeScript client guide](clients/typescript/) for installation and
 package-name compatibility details.
+
+### Rail SDK
+
+Give an agent memory around every turn. Rail fetches the governance rules and
+the facts relevant to the current message before your agent runs, hands you
+prompt-ready context, then extracts and stores what the turn taught. Python
+and TypeScript share the same semantics; both work against managed and
+self-hosted Caura.
+
+```bash
+pip install caura-rail        # Python 3.10+
+npm install @caura/rail       # Node.js 22+
+```
+
+Point it at any Caura with `CAURA_URL` and `CAURA_API_KEY` (for the standalone
+Docker server above: `http://localhost:8000` and `standalone`), then wrap each
+agent turn:
+
+```python
+from caura_rail import MemoryScope, Rail, RestMemoryStore
+
+with RestMemoryStore.from_env() as store:
+    rail = Rail(store, MemoryScope(agent_id="support-1", fleet_id="support"))
+    with rail.turn("Remember: We deploy in eu-west-1.") as turn:
+        # Call your model here; turn.context.text holds rules first, then facts.
+        turn.reply = "Noted. " + turn.context.text
+    print([w.status for w in turn.writes])   # ['written'], or ['deduplicated'] on a rerun
+```
+
+```js
+import { MemoryScope, Rail, RestMemoryStore } from "@caura/rail";
+
+const rail = new Rail({
+  store: RestMemoryStore.fromEnv(process.env),
+  scope: new MemoryScope({ agentId: "support-1", fleetId: "support" }),
+});
+const turn = await rail.turn("Remember: We deploy in eu-west-1.", (_, ctx) => "Noted. " + ctx.text);
+console.log(turn.writes.map(w => w.status));   // ['written'], or ['deduplicated'] on a rerun
+```
+
+Each turn recalls, runs your code, extracts, and writes; a turn whose code
+raises writes nothing, and writes that fail on a temporary error wait in an
+outbox you replay. Use the clients above when you only need to call the API;
+use Rail when an agent should remember and follow rules. Guide, API reference,
+and reliability semantics live in the [Rail repository](https://github.com/caura-ai/caura-rail).
 
 ---
 
