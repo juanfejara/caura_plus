@@ -8,11 +8,7 @@ for releases.
 
 | Name | GitHub Handle | Role | Areas of ownership |
 |------|---------------|------|--------------------|
-| Eldad Dahan | [@Eldad-Caura](https://github.com/Eldad-Caura) | Lead maintainer | Infra & engineering |
-| Erni Avraham | [@erni-a](https://github.com/erni-a) | Maintainer | Infra & engineering |
-| Ran Taig | [@ran-taig](https://github.com/ran-taig) | Maintainer | Logic & algorithms |
-| Arkady Mankovsky | [@arkash20](https://github.com/arkash20) | Maintainer | Logic & algorithms |
-| Shahar Margalit | [@shahar-caura](https://github.com/shahar-caura) | Maintainer | Functional testing & quality |
+| Juan Fernando Jaramillo | (https://github.com/juanfejara) | Lead maintainer | Infra & engineering |
 
 ## Emeritus Maintainers
 
